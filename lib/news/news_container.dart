@@ -1,107 +1,65 @@
 import 'package:flutter/material.dart';
-import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
-import 'package:news_project/model/NewsResponse.dart';
+import 'package:news_project/news/news_container_viewModel.dart';
 import 'package:news_project/news/news_item.dart';
-import 'package:news_project/news/search.dart';
+import 'package:provider/provider.dart';
+
 import '../MyTheme.dart';
-import '../apis/api_manager.dart';
 import '../model/SourceResponse.dart';
 
 class NewsContainer extends StatefulWidget {
   Source source;
-  final News? news;
-  NewsContainer({required this.source, this.news});
+
+  NewsContainer({required this.source});
 
   @override
   State<NewsContainer> createState() => _NewsContainerState();
 }
 
 class _NewsContainerState extends State<NewsContainer> {
-  List newsList = [];
-
-  static const _pageSize = 20;
-
-  final PagingController _pagingController = PagingController(firstPageKey: 0);
+  NewsContainerViewModel viewModel = NewsContainerViewModel();
 
   @override
   void initState() {
-    _pagingController.addPageRequestListener((pageKey) {
-      _fetchPage(pageKey);
-    });
+    // TODO: implement initState
     super.initState();
-  }
-
-  Future<void> _fetchPage(int pageKey) async {
-    try {
-      final newItems =
-          await ApiManager.getNewsBySourcesId(widget.source.id ?? '');
-      final isLastPage = newItems?.articles!.length ?? 0 < _pageSize;
-
-      if (isLastPage == true) {
-        _pagingController.appendLastPage(newsList);
-      } else {
-        final nextPageKey = pageKey++;
-        _pagingController.appendPage(newsList, nextPageKey);
-      }
-    } catch (error) {
-      _pagingController.error = error;
-    }
+    viewModel.getNewsBySourceId(widget.source.id ?? '');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: FutureBuilder(
-          future: ApiManager.getNewsBySourcesId(widget.source.id ?? ''),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(
-                child: CircularProgressIndicator(
-                  color: MyTheme.primaryColor,
+        body: ChangeNotifierProvider(
+      create: (context) => viewModel,
+      child: Consumer<NewsContainerViewModel>(
+        builder: (context, viewModel, child) {
+          if (viewModel.errorMessage != null) {
+            return Column(
+              children: [
+                Text('SomeThing Went Wrong'),
+                ElevatedButton(
+                  onPressed: () {
+                    viewModel.getNewsBySourceId(widget.source.id ?? '');
+                  },
+                  child: Text('Try Again'),
                 ),
-              );
-            } else if (snapshot.hasError) {
-              print('snapshot has error');
-              return Column(
-                children: [
-                  Text('SomeThing Went Wrong'),
-                  ElevatedButton(
-                    onPressed: () {},
-                    child: Text('Try Again'),
-                  ),
-                ],
-              );
-            }
-            if (snapshot.data?.status != 'ok') {
-              print('status error');
-              return Column(
-                children: [
-                  Text(snapshot.data!.message!),
-                  ElevatedButton(
-                    onPressed: () {},
-                    child: Text('Try Again'),
-                  )
-                ],
-              );
-            }
-            print('status = ok');
-            var newsList = snapshot.data?.articles ?? [];
-            return PagedListView(
-              itemExtent: 20.0,
-              pagingController: _pagingController,
-              builderDelegate: PagedChildBuilderDelegate(
-                itemBuilder: (context, item, index) =>
-                    NewsItem(news: newsList[index]),
-
+              ],
+            );
+          } else if (viewModel.newsList == null) {
+            return Center(
+              child: CircularProgressIndicator(
+                color: MyTheme.primaryColor,
               ),
             );
-          }),
-    );
-  }
-
-  @override
-  void dispose() {
-    _pagingController.dispose();
-    super.dispose();
+          } else {
+            return ListView.builder(
+              itemBuilder: (context, index) {
+                return NewsItem(news: viewModel.newsList![index]);
+              },
+              itemCount: viewModel.newsList?.length,
+            );
+          }
+        },
+      ),
+    ));
   }
 }
